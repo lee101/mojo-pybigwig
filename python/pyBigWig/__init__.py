@@ -224,9 +224,11 @@ class bigWigFile:
 
     def values(self, chrom: str, start: int, end: int, numpy: bool = False):
         start, end, data = self._query(chrom, start, end)
-        result = np.full(end - start, np.nan, dtype=np.float64)
+        result = np.empty(end - start, dtype=np.float64)
         if data.starts.size:
             kernel_values(data.starts, data.ends, data.values, start, end, result)
+        else:
+            result.fill(np.nan)
         return result if numpy else result.tolist()
 
     def stats(self, chrom: str, start: int | None = None, end: int | None = None,

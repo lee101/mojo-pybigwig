@@ -44,13 +44,20 @@ best of its repeated runs.
 
 | kernel | mojo-pybigwig | pyBigWig | speedup |
 | --- | ---: | ---: | ---: |
-| values 5M bases | 76.60 ms | 31.21 ms | 0.41x |
-| exact mean 10k bins | 20.34 ms | 1780.96 ms | 87.56x |
+| values 5M bases | 4.92 ms | 26.53 ms | 5.39x |
+| exact mean 10k bins | 16.55 ms | 1624.58 ms | 98.15x |
 
 The reader retains the last decoded query, avoiding repeated decompression and
-array construction for repeated interval requests. `values` uses SIMD stores
-for covered runs; exact statistics remains a single Mojo overlap-accumulation
-call. Run `pixi run bench` to measure your machine.
+array construction for repeated interval requests. `values` allocates an
+uninitialized NumPy result and uses one Mojo pass to SIMD-fill both covered runs
+and NaN gaps. Large non-overlapping queries are split into disjoint coordinate
+regions after a size threshold; smaller and overlapping queries stay serial.
+Exact statistics remains a single Mojo overlap-accumulation call.
+
+There is no GPU path. Interval expansion is a bandwidth-bound store kernel, and
+exact bin accumulation is also below the roughly two-flops-per-byte threshold;
+host/device transfers and launch overhead would make either path slower. Run
+`pixi run bench` to measure your machine.
 
 ## Verification
 

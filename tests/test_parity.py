@@ -59,6 +59,38 @@ def test_values_simd_tail_matches_upstream(fixture):
     mine.close(); ref.close()
 
 
+def test_values_kernel_fills_gaps_overlaps_and_simd_tails():
+    from pyBigWig._lib import values
+
+    starts = np.array([3, 11, 14], dtype=np.int64)
+    ends = np.array([8, 17, 19], dtype=np.int64)
+    payload = np.array([1.25, 2.5, -4.0], dtype=np.float64)
+    result = np.empty(23, dtype=np.float64)
+    values(starts, ends, payload, 0, 23, result)
+    expected = np.full(23, np.nan, dtype=np.float64)
+    expected[3:8] = 1.25
+    expected[11:17] = 2.5
+    expected[14:19] = -4.0
+    np.testing.assert_array_equal(result, expected)
+
+
+def test_values_kernel_parallel_threshold_and_tail():
+    from pyBigWig._lib import values
+
+    n = 16_385
+    starts = np.arange(n, dtype=np.int64) * 65
+    ends = starts + 33
+    payload = np.linspace(-3.0, 7.0, n, dtype=np.float64)
+    length = 1_064_997
+    result = np.empty(length, dtype=np.float64)
+    values(starts, ends, payload, 0, length, result)
+    for index in (0, 1, n // 2, n - 1):
+        assert np.all(result[starts[index]:ends[index]] == payload[index])
+        if ends[index] < length:
+            assert math.isnan(result[ends[index]])
+    assert math.isnan(result[-1])
+
+
 def test_reuses_the_last_decoded_query(fixture):
     path, _ = fixture
     mine = mojo_bw.open(path)
