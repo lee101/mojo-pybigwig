@@ -1,52 +1,12 @@
 """Hot interval-query loops exposed to the Python bigWig reader."""
 
-from std.runtime import initialize_runtime
-from std.runtime.asyncrt import TaskGroup
 from std.sys.info import simd_width_of
 
 comptime IPtr = UnsafePointer[Int, AnyOrigin[mut=True]]
 comptime FPtr = UnsafePointer[Float64, AnyOrigin[mut=True]]
 comptime W = simd_width_of[DType.float64]()
-comptime VALUES_PARALLEL_BASES = 1_048_576
-comptime VALUES_PARALLEL_INTERVALS = 16_384
 
 
-@always_inline
-def sync_parallelize[FuncType: def(Int) -> None](func: FuncType, count: Int):
-    @__parameter
-    @always_inline
-    def wrapped(index: Int):
-        func(index)
-
-    @always_inline
-    @__parameter
-    async def task_fn(index: Int):
-        wrapped(index)
-
-    var tasks = TaskGroup()
-    for index in range(count):
-        tasks.create_task(task_fn(index))
-    tasks.wait()
-
-
-@always_inline
-def parallelize[
-    origins: OriginSet,
-    //,
-    func: def(Int) capturing[origins] -> None,
-](num_work_items: Int, num_workers: Int):
-    def unified_func(index: Int):
-        func(index)
-
-    var chunk_size, extra_items = divmod(num_work_items, num_workers)
-
-    @always_inline
-    def worker(worker_index: Int) {imm chunk_size, imm extra_items}:
-        var start = worker_index * chunk_size + min(worker_index, extra_items)
-        for index in range(chunk_size + Int(worker_index < extra_items)):
-            unified_func(start + index)
-
-    sync_parallelize(worker, num_workers)
 
 
 def fill_range(result: FPtr, begin: Int, end: Int, value: Float64):
@@ -107,61 +67,18 @@ def mpbw_values(starts_addr: Int, ends_addr: Int, values_addr: Int, n: Int,
     var values = FPtr(unsafe_from_address=values_addr)
     var result = FPtr(unsafe_from_address=result_addr)
 
-    var non_overlapping = True
-    var i = 0
-    while i + 1 < n:
-        if ends.load(i) > starts.load(i + 1):
-            non_overlapping = False
-            break
-        i += 1
-
-    var length = query_end - query_start
-    if (
-        non_overlapping
-        and length >= VALUES_PARALLEL_BASES
-        and n >= VALUES_PARALLEL_INTERVALS
-    ):
-        var tasks = min(8, n)
-
-        initialize_runtime()
-
-        @__parameter
-        def work(task: Int):
-            var first = (task * n) // tasks
-            var last = ((task + 1) * n) // tasks
-            var region_start = query_start
-            if first > 0:
-                region_start = min(max(ends.load(first - 1), query_start), query_end)
-            var region_end = query_end
-            if last < n:
-                region_end = min(max(ends.load(last - 1), query_start), query_end)
-            values_range(
-                starts,
-                ends,
-                values,
-                first,
-                last,
-                query_start,
-                query_end,
-                region_start,
-                region_end,
-                result,
-            )
-
-        parallelize[work](tasks, tasks)
-    else:
-        values_range(
-            starts,
-            ends,
-            values,
-            0,
-            n,
-            query_start,
-            query_end,
-            query_start,
-            query_end,
-            result,
-        )
+    values_range(
+        starts,
+        ends,
+        values,
+        0,
+        n,
+        query_start,
+        query_end,
+        query_start,
+        query_end,
+        result,
+    )
 
 
 @export("mpbw_bin_accumulate")
