@@ -38,13 +38,13 @@ def values_range(
     var nan = zero / zero
     var i = first
     while i < last:
-        var lo = max(starts.load(i), query_start)
-        var hi = min(ends.load(i), query_end)
+        var lo = max(starts.unsafe_load(i), query_start)
+        var hi = min(ends.unsafe_load(i), query_end)
         if lo < hi:
             if cursor < lo:
                 fill_range(result, cursor - query_start, lo - query_start, nan)
             fill_range(
-                result, lo - query_start, hi - query_start, values.load(i)
+                result, lo - query_start, hi - query_start, values.unsafe_load(i)
             )
             cursor = max(cursor, hi)
         i += 1
@@ -107,12 +107,12 @@ def mpbw_bin_accumulate(starts_addr: Int, ends_addr: Int, values_addr: Int, n: I
 
     var i = 0
     while i < n:
-        var lo = max(starts.load(i), query_start)
-        var hi = min(ends.load(i), query_end)
+        var lo = max(starts.unsafe_load(i), query_start)
+        var hi = min(ends.unsafe_load(i), query_end)
         if lo < hi:
             var first_bin = ((lo - query_start) * bins) // length
             var last_bin = ((hi - 1 - query_start) * bins) // length
-            var value = values.load(i)
+            var value = values.unsafe_load(i)
             var bin = first_bin
             while bin <= last_bin:
                 var bin_start = query_start + (bin * length) // bins
@@ -121,12 +121,12 @@ def mpbw_bin_accumulate(starts_addr: Int, ends_addr: Int, values_addr: Int, n: I
                 var covered_end = min(hi, bin_end)
                 var weight = Float64(covered_end - covered_start)
                 var offset = bin * 5
-                acc.store(offset, acc.load(offset) + value * weight)
-                acc.store(offset + 1, acc.load(offset + 1) + weight)
-                if value < acc.load(offset + 2):
+                acc.store(offset, acc.unsafe_load(offset) + value * weight)
+                acc.store(offset + 1, acc.unsafe_load(offset + 1) + weight)
+                if value < acc.unsafe_load(offset + 2):
                     acc.store(offset + 2, value)
-                if value > acc.load(offset + 3):
+                if value > acc.unsafe_load(offset + 3):
                     acc.store(offset + 3, value)
-                acc.store(offset + 4, acc.load(offset + 4) + value * value * weight)
+                acc.store(offset + 4, acc.unsafe_load(offset + 4) + value * value * weight)
                 bin += 1
         i += 1
